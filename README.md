@@ -1,3 +1,5 @@
 # Skin Test
 
-Testing skeleton skinning using GLTF in Kha.
+Testing mesh skinning using GLTF in Kha.
+
+[demo](https://fuzzywuzzie.github.io/skin-test/)
