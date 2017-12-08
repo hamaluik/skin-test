@@ -21,10 +21,10 @@ import kha.graphics4.MipMapFilter;
 import haxe.ds.Vector;
 import gltf.GLTF;
 import glm.GLM;
-using glm.Mat4;
-using glm.Vec4;
-using glm.Vec3;
-using glm.Quat;
+import glm.Mat4;
+import glm.Vec4;
+import glm.Vec3;
+import glm.Quat;
 
 @:allow(Main)
 class Game {
@@ -32,9 +32,14 @@ class Game {
 	static var mvpID:ConstantLocation;
     static var jointMatricesIDs:Array<ConstantLocation>;
     static var texID:TextureUnit;
+    static var inverseBindMatrices:Array<Mat4>;
 
     static var mvp:Mat4;
+    static var vp:Mat4;
+    static var mBase:Mat4;
     static var mJoints:Array<Mat4>;
+
+    static var jointMatrices:Array<Mat4>;
 
     static var vertexBuffer:VertexBuffer;
 	static var indexBuffer:IndexBuffer;
@@ -116,7 +121,7 @@ class Game {
 		indexBuffer.unlock();
 
         mvp = new Mat4();
-        var m = Mat4.identity(new Mat4());
+        mBase = Mat4.identity(new Mat4());
         var v:Mat4 = GLM.lookAt(
             new Vec3(5, 5, 5),
             new Vec3(0, 0, 0),
@@ -129,18 +134,40 @@ class Game {
             0.1, 100,
             new Mat4()
         );
-        var vp = Mat4.multMat(p, v, new Mat4());
-        mvp = Mat4.multMat(vp, m, mvp);
+        vp = Mat4.multMat(p, v, new Mat4());
+
+        inverseBindMatrices = new Array<Mat4>();
+        inverseBindMatrices.push(Mat4.fromFloatArray(cylinder.skins[0].inverseBindMatrices[0].toArray()));
+        inverseBindMatrices.push(Mat4.fromFloatArray(cylinder.skins[0].inverseBindMatrices[1].toArray()));
 
         mJoints = new Array<Mat4>();
         mJoints.push(Mat4.identity(new Mat4()));
         mJoints.push(Mat4.identity(new Mat4()));
+        GLM.translate(new Vec3(0, 1, 0), mJoints[1]);
+
+        jointMatrices = new Array<Mat4>();
+        jointMatrices.push(Mat4.identity(new Mat4()));
+        jointMatrices.push(Mat4.identity(new Mat4()));
     }
 
     static function update():Void {
-        GLM.rotate(Quat.fromEuler(0, Math.sin(angle) * Math.PI / 2, 0, new Quat()), mJoints[1]);
-
+        // TODO: base movement isn't being applied?
+        GLM.translate(new Vec3(Math.cos(angle), -1, Math.sin(angle)), mBase);
+        GLM.transform(
+            new Vec3(0, 1, 0),
+            Quat.fromEuler(0, Math.sin(angle) * Math.PI / 2, 0, new Quat()),
+            new Vec3(1, 1, 1),
+            mJoints[1]
+        );
         angle += (Math.PI / 2) / 60;
+
+        var mInverse:Mat4 = Mat4.invert(mBase, new Mat4());
+        for(i in 0...2) {
+            Mat4.multMat(mInverse, mJoints[i], jointMatrices[i]);
+            Mat4.multMat(jointMatrices[i], inverseBindMatrices[i], jointMatrices[i]);
+        }
+
+        Mat4.multMat(vp, mBase, mvp);
     }
 
     static function render(fb:Framebuffer):Void {
@@ -151,8 +178,8 @@ class Game {
         g.setPipeline(pipeline);
 
         g.setMatrix(mvpID, mvp);
-        g.setMatrix(jointMatricesIDs[0], mJoints[0]);
-        g.setMatrix(jointMatricesIDs[1], mJoints[1]);
+        g.setMatrix(jointMatricesIDs[0], jointMatrices[0]);
+        g.setMatrix(jointMatricesIDs[1], jointMatrices[1]);
 
         g.setTextureParameters(texID,
             TextureAddressing.Repeat, TextureAddressing.Repeat,
