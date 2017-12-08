@@ -15,6 +15,9 @@ import kha.graphics4.VertexStructure;
 import kha.graphics4.VertexBuffer;
 import kha.graphics4.IndexBuffer;
 import kha.graphics4.Usage;
+import kha.graphics4.TextureAddressing;
+import kha.graphics4.TextureFilter;
+import kha.graphics4.MipMapFilter;
 import haxe.ds.Vector;
 import gltf.GLTF;
 import glm.GLM;
@@ -27,17 +30,23 @@ using glm.Quat;
 class Game {
 	static var pipeline:PipelineState;
 	static var mvpID:ConstantLocation;
+    static var jointMatricesIDs:Array<ConstantLocation>;
     static var texID:TextureUnit;
 
     static var mvp:Mat4;
+    static var mJoints:Array<Mat4>;
 
     static var vertexBuffer:VertexBuffer;
 	static var indexBuffer:IndexBuffer;
+
+    static var angle:Float = 0;
 
     static function initialize():Void {
         var structure = new VertexStructure();
         structure.add("position", VertexData.Float3);
         structure.add("texcoord", VertexData.Float2);
+        structure.add("joints", VertexData.Float4);
+        structure.add("weights", VertexData.Float4);
 
 		pipeline = new PipelineState();
 		pipeline.inputLayout = [structure];
@@ -60,6 +69,9 @@ class Game {
         }
 
 		mvpID = pipeline.getConstantLocation("MVP");
+        jointMatricesIDs = new Array<ConstantLocation>();
+        jointMatricesIDs.push(pipeline.getConstantLocation("jointMatrices[0]"));
+        jointMatricesIDs.push(pipeline.getConstantLocation("jointMatrices[1]"));
 		texID = pipeline.getTextureUnit("tex");
 
         var cylinder:GLTF = GLTF.parseAndLoad(Assets.blobs.cylinder_gltf.toString(), [
@@ -68,6 +80,8 @@ class Game {
 
         var positions:Vector<Float> = cylinder.meshes[0].primitives[0].getFloatAttributeValues("POSITION");
         var texcoords:Vector<Float> = cylinder.meshes[0].primitives[0].getFloatAttributeValues("TEXCOORD_0");
+        var joints:Vector<Int> = cylinder.meshes[0].primitives[0].getIntAttributeValues("JOINTS_0");
+        var weights:Vector<Float> = cylinder.meshes[0].primitives[0].getFloatAttributeValues("WEIGHTS_0");
         var indices:Vector<Int> = cylinder.meshes[0].primitives[0].getIndexValues();
 
         var numVerts:Int = Std.int(positions.length / 3);
@@ -75,12 +89,22 @@ class Game {
         vertexBuffer = new VertexBuffer(numVerts, structure, Usage.StaticUsage);
         var vbData = vertexBuffer.lock();
         for(v in 0...numVerts) {
-            vbData[(v * 5) + 0] = positions[(v * 3) + 0];
-            vbData[(v * 5) + 1] = positions[(v * 3) + 1];
-            vbData[(v * 5) + 2] = positions[(v * 3) + 2];
+            vbData[(v * 13) + 0] = positions[(v * 3) + 0];
+            vbData[(v * 13) + 1] = positions[(v * 3) + 1];
+            vbData[(v * 13) + 2] = positions[(v * 3) + 2];
 
-            vbData[(v * 5) + 3] = texcoords[(v * 2) + 0];
-            vbData[(v * 5) + 4] = texcoords[(v * 2) + 1];
+            vbData[(v * 13) + 3] = texcoords[(v * 2) + 0];
+            vbData[(v * 13) + 4] = texcoords[(v * 2) + 1];
+
+            vbData[(v * 13) + 5] = joints[(v * 4) + 0];
+            vbData[(v * 13) + 6] = joints[(v * 4) + 1];
+            vbData[(v * 13) + 7] = joints[(v * 4) + 2];
+            vbData[(v * 13) + 8] = joints[(v * 4) + 3];
+
+            vbData[(v * 13) +  9] = weights[(v * 4) + 0];
+            vbData[(v * 13) + 10] = weights[(v * 4) + 1];
+            vbData[(v * 13) + 11] = weights[(v * 4) + 2];
+            vbData[(v * 13) + 12] = weights[(v * 4) + 3];
         }
         vertexBuffer.unlock();
 
@@ -107,9 +131,16 @@ class Game {
         );
         var vp = Mat4.multMat(p, v, new Mat4());
         mvp = Mat4.multMat(vp, m, mvp);
+
+        mJoints = new Array<Mat4>();
+        mJoints.push(Mat4.identity(new Mat4()));
+        mJoints.push(Mat4.identity(new Mat4()));
     }
 
     static function update():Void {
+        GLM.rotate(Quat.fromEuler(0, Math.sin(angle) * Math.PI / 2, 0, new Quat()), mJoints[1]);
+
+        angle += (Math.PI / 2) / 60;
     }
 
     static function render(fb:Framebuffer):Void {
@@ -120,6 +151,14 @@ class Game {
         g.setPipeline(pipeline);
 
         g.setMatrix(mvpID, mvp);
+        g.setMatrix(jointMatricesIDs[0], mJoints[0]);
+        g.setMatrix(jointMatricesIDs[1], mJoints[1]);
+
+        g.setTextureParameters(texID,
+            TextureAddressing.Repeat, TextureAddressing.Repeat,
+            TextureFilter.LinearFilter, TextureFilter.LinearFilter,
+            MipMapFilter.NoMipFilter
+        );
         g.setTexture(texID, Assets.images.uvgrid);
 
         g.setVertexBuffer(vertexBuffer);
