@@ -151,8 +151,9 @@ class Game {
     }
 
     static function update():Void {
-        // TODO: base movement isn't being applied?
-        GLM.translate(new Vec3(Math.cos(angle), -1, Math.sin(angle)), mBase);
+        Mat4.identity(mJoints[0]);
+
+        GLM.translate(new Vec3(0, Math.sin(angle) - 1, 0), mBase);
         GLM.transform(
             new Vec3(0, 1, 0),
             Quat.fromEuler(0, Math.sin(angle) * Math.PI / 2, 0, new Quat()),
@@ -160,6 +161,9 @@ class Game {
             mJoints[1]
         );
         angle += (Math.PI / 2) / 60;
+
+        Mat4.multMat(mBase, mJoints[0], mJoints[0]);
+        Mat4.multMat(mJoints[0], mJoints[1], mJoints[1]);
 
         var mInverse:Mat4 = Mat4.invert(mBase, new Mat4());
         for(i in 0...2) {
